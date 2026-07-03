@@ -9,7 +9,10 @@ public enum RudimentId
 	ParadiddleDiddle,
 	FlamAccent,
 	DragLike,
-	AccentGrid
+	AccentGrid,
+	InvertedParadiddle,
+	HertaLike,
+	SyncopatedTriplet
 }
 
 public readonly struct RudimentInfo
@@ -38,7 +41,10 @@ public static class RudimentLibrary
 		{ RudimentId.ParadiddleDiddle, new RudimentInfo(RudimentId.ParadiddleDiddle, "Paradiddle-diddle", 3, "six-note phrase") },
 		{ RudimentId.FlamAccent, new RudimentInfo(RudimentId.FlamAccent, "Flam Accent", 4, "accent phrase") },
 		{ RudimentId.DragLike, new RudimentInfo(RudimentId.DragLike, "Drag", 4, "pickup accent") },
-		{ RudimentId.AccentGrid, new RudimentInfo(RudimentId.AccentGrid, "Accent Grid", 3, "dynamic control") }
+		{ RudimentId.AccentGrid, new RudimentInfo(RudimentId.AccentGrid, "Accent Grid", 3, "dynamic control") },
+		{ RudimentId.InvertedParadiddle, new RudimentInfo(RudimentId.InvertedParadiddle, "Inverted Paradiddle", 4, "inside-out hand shift") },
+		{ RudimentId.HertaLike, new RudimentInfo(RudimentId.HertaLike, "Herta", 5, "burst grouping") },
+		{ RudimentId.SyncopatedTriplet, new RudimentInfo(RudimentId.SyncopatedTriplet, "Sync Triplet", 5, "triplet push") }
 	};
 
 	private static readonly Dictionary<RudimentId, HitType[]> Patterns = new Dictionary<RudimentId, HitType[]>
@@ -62,7 +68,16 @@ public static class RudimentLibrary
 		{ RudimentId.DragLike, new[] { HitType.Left, HitType.Left, HitType.AccentRight, HitType.Right, HitType.Left, HitType.AccentRight } },
 
 		// Accent grid: same hand pattern, different musical weight.
-		{ RudimentId.AccentGrid, new[] { HitType.AccentLeft, HitType.Right, HitType.Left, HitType.Right, HitType.Left, HitType.AccentRight, HitType.Left, HitType.Right } }
+		{ RudimentId.AccentGrid, new[] { HitType.AccentLeft, HitType.Right, HitType.Left, HitType.Right, HitType.Left, HitType.AccentRight, HitType.Left, HitType.Right } },
+
+		// Inside-out phrasing that feels less predictable on the grid.
+		{ RudimentId.InvertedParadiddle, new[] { HitType.Left, HitType.Left, HitType.Right, HitType.Left, HitType.Right, HitType.Right, HitType.Left, HitType.Right } },
+
+		// Burst-oriented four-note cell that creates a denser push.
+		{ RudimentId.HertaLike, new[] { HitType.Left, HitType.Right, HitType.Right, HitType.Right, HitType.Right, HitType.Left, HitType.Left, HitType.Left } },
+
+		// Triplet-style grouping flattened into the current step grid.
+		{ RudimentId.SyncopatedTriplet, new[] { HitType.AccentLeft, HitType.Right, HitType.Left, HitType.AccentRight, HitType.Left, HitType.Right } }
 	};
 
 	public static HitType[] Get(RudimentId id, bool mirror = false)
@@ -152,6 +167,27 @@ public static class RudimentLibrary
 		return groove;
 	}
 
+	public static HitType[] BuildShiftedGroove(RudimentId id, bool mirror, int slotCount, int rotationSteps, int[] accentSlots = null, int[] restSlots = null)
+	{
+		HitType[] groove = BuildGroove(id, mirror, slotCount, accentSlots, restSlots);
+		return Rotate(groove, rotationSteps);
+	}
+
+	public static HitType[] BuildCompositePhrase(int slotCount, int[] accentSlots = null, int[] restSlots = null, params (RudimentId Id, bool Mirror, int Rotation)[] parts)
+	{
+		List<HitType> source = new List<HitType>();
+		if (parts != null)
+		{
+			foreach ((RudimentId id, bool mirror, int rotation) in parts)
+			{
+				HitType[] phrase = Rotate(Get(id, mirror), rotation);
+				source.AddRange(phrase);
+			}
+		}
+
+		return BuildGrooveFromHits(source.ToArray(), slotCount, accentSlots, restSlots);
+	}
+
 	public static HitType[] AddSparseRests(HitType[] pattern, int everyNthSlot)
 	{
 		if (pattern == null || pattern.Length == 0 || everyNthSlot <= 1)
@@ -185,6 +221,24 @@ public static class RudimentLibrary
 		for (int i = 0; i < count; i++)
 		{
 			result[i] = source[i % source.Length];
+		}
+
+		return result;
+	}
+
+	private static HitType[] Rotate(HitType[] source, int steps)
+	{
+		if (source == null || source.Length == 0)
+		{
+			return Array.Empty<HitType>();
+		}
+
+		HitType[] result = new HitType[source.Length];
+		int shift = ((steps % source.Length) + source.Length) % source.Length;
+		for (int i = 0; i < source.Length; i++)
+		{
+			int sourceIndex = (i + shift) % source.Length;
+			result[i] = source[sourceIndex];
 		}
 
 		return result;

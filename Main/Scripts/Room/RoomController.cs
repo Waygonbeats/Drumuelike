@@ -188,7 +188,9 @@ public partial class RoomController : Node2D
 			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.SingleStroke, mirror: true, slotCount: 8, accentSlots: new[] { 0, 4 }), $"Pulse: {RudimentLibrary.GetDisplayName(RudimentId.SingleStroke, mirror: true)}"),
 			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.DoubleStroke, mirror: false, slotCount: 8, accentSlots: new[] { 0, 4 }), $"Roll: {RudimentLibrary.GetDisplayName(RudimentId.DoubleStroke)}"),
 			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.SingleStroke, mirror: false, slotCount: 8, accentSlots: new[] { 0, 4 }, restSlots: new[] { 3 }), $"Pocket: {RudimentLibrary.GetDisplayName(RudimentId.SingleStroke)}"),
-			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.AccentGrid, mirror: false, slotCount: 8, accentSlots: new[] { 0, 5 }), $"Dynamics: {RudimentLibrary.GetDisplayName(RudimentId.AccentGrid)}")
+			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.AccentGrid, mirror: false, slotCount: 8, accentSlots: new[] { 0, 5 }), $"Dynamics: {RudimentLibrary.GetDisplayName(RudimentId.AccentGrid)}"),
+			new PatternVariant(RudimentLibrary.BuildShiftedGroove(RudimentId.SingleStroke, mirror: false, slotCount: 8, rotationSteps: 1, accentSlots: new[] { 2, 6 }, restSlots: new[] { 5 }), $"Offset: {RudimentLibrary.GetDisplayName(RudimentId.SingleStroke)}"),
+			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.SyncopatedTriplet, mirror: false, slotCount: 8, accentSlots: new[] { 0, 3, 6 }, restSlots: new[] { 2 }), $"Triplet: {RudimentLibrary.GetDisplayName(RudimentId.SyncopatedTriplet)}")
 		};
 
 		return SelectVariant(variants, wave, salt: 11);
@@ -203,7 +205,9 @@ public partial class RoomController : Node2D
 			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.Paradiddle, mirror: true, slotCount: 8, accentSlots: new[] { 0, 4 }), $"Shift: {RudimentLibrary.GetDisplayName(RudimentId.Paradiddle, mirror: true)}"),
 			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.ParadiddleDiddle, mirror: false, slotCount: 8, accentSlots: new[] { 0, 3, 6 }), $"Float: {RudimentLibrary.GetDisplayName(RudimentId.ParadiddleDiddle)}"),
 			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.Paradiddle, mirror: false, slotCount: 8, accentSlots: new[] { 0, 5 }, restSlots: new[] { 3 }), $"Pocket: {RudimentLibrary.GetDisplayName(RudimentId.Paradiddle)}"),
-			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.FlamAccent, mirror: false, slotCount: 8, accentSlots: new[] { 0, 3, 6 }), $"Accent: {RudimentLibrary.GetDisplayName(RudimentId.FlamAccent)}")
+			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.FlamAccent, mirror: false, slotCount: 8, accentSlots: new[] { 0, 3, 6 }), $"Accent: {RudimentLibrary.GetDisplayName(RudimentId.FlamAccent)}"),
+			new PatternVariant(RudimentLibrary.BuildGroove(RudimentId.InvertedParadiddle, mirror: false, slotCount: 8, accentSlots: new[] { 1, 4, 7 }), $"Inside-Out: {RudimentLibrary.GetDisplayName(RudimentId.InvertedParadiddle)}"),
+			new PatternVariant(RudimentLibrary.BuildShiftedGroove(RudimentId.ParadiddleDiddle, mirror: true, slotCount: 8, rotationSteps: 2, accentSlots: new[] { 0, 4, 7 }, restSlots: new[] { 3 }), $"Broken Float: {RudimentLibrary.GetDisplayName(RudimentId.ParadiddleDiddle, mirror: true)}")
 		};
 
 		return SelectVariant(variants, wave, salt: 23);
@@ -218,7 +222,10 @@ public partial class RoomController : Node2D
 			new PatternVariant(RudimentLibrary.ComposeGroove(16, new[] { 0, 6, 10, 14 }, new[] { 4 }, (RudimentId.Paradiddle, false), (RudimentId.DoubleStroke, true)), $"Control: {RudimentLibrary.GetPhraseName((RudimentId.Paradiddle, false), (RudimentId.DoubleStroke, true))}"),
 			new PatternVariant(RudimentLibrary.ComposeGroove(16, new[] { 0, 2, 8, 13 }, new[] { 6 }, (RudimentId.DragLike, false), (RudimentId.ParadiddleDiddle, true)), $"Drag Chain: {RudimentLibrary.GetPhraseName((RudimentId.DragLike, false), (RudimentId.ParadiddleDiddle, true))}"),
 			new PatternVariant(RudimentLibrary.ComposeGroove(16, new[] { 0, 5, 8, 13 }, new[] { 6, 11 }, (RudimentId.Paradiddle, false), (RudimentId.FlamAccent, true)), $"Pocket: {RudimentLibrary.GetPhraseName((RudimentId.Paradiddle, false), (RudimentId.FlamAccent, true))}"),
-			new PatternVariant(RudimentLibrary.ComposeGroove(16, new[] { 0, 4, 8, 12 }, null, (RudimentId.AccentGrid, false), (RudimentId.Paradiddle, true)), $"Finale: {RudimentLibrary.GetPhraseName((RudimentId.AccentGrid, false), (RudimentId.Paradiddle, true))}")
+			new PatternVariant(RudimentLibrary.ComposeGroove(16, new[] { 0, 4, 8, 12 }, null, (RudimentId.AccentGrid, false), (RudimentId.Paradiddle, true)), $"Finale: {RudimentLibrary.GetPhraseName((RudimentId.AccentGrid, false), (RudimentId.Paradiddle, true))}"),
+			new PatternVariant(RudimentLibrary.BuildCompositePhrase(16, new[] { 0, 3, 8, 11, 14 }, new[] { 5, 12 }, (RudimentId.InvertedParadiddle, false, 1), (RudimentId.HertaLike, true, 2)), $"Pressure: {RudimentLibrary.GetDisplayName(RudimentId.InvertedParadiddle)} + {RudimentLibrary.GetDisplayName(RudimentId.HertaLike, true)}"),
+			new PatternVariant(RudimentLibrary.BuildCompositePhrase(16, new[] { 0, 4, 6, 10, 15 }, new[] { 3, 11 }, (RudimentId.SyncopatedTriplet, false, 0), (RudimentId.FlamAccent, true, 1), (RudimentId.DoubleStroke, false, 0)), $"Tripwire: {RudimentLibrary.GetDisplayName(RudimentId.SyncopatedTriplet)} + {RudimentLibrary.GetDisplayName(RudimentId.FlamAccent, true)}"),
+			new PatternVariant(RudimentLibrary.BuildCompositePhrase(16, new[] { 1, 5, 9, 13 }, new[] { 7 }, (RudimentId.HertaLike, false, 0), (RudimentId.ParadiddleDiddle, false, 3), (RudimentId.SingleStroke, true, 0)), $"Surge: {RudimentLibrary.GetDisplayName(RudimentId.HertaLike)} + {RudimentLibrary.GetDisplayName(RudimentId.ParadiddleDiddle)}")
 		};
 
 		return SelectVariant(variants, wave, salt: 37);

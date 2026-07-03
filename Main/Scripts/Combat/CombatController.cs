@@ -109,6 +109,8 @@ public partial class CombatController : Node
 	private Player _player;
 	private AudioStreamPlayer _hitSfxPlayer;
 	private AudioStreamPlayer _missSfxPlayer;
+	private AudioStreamPlayer _timelinePreviewLeftPlayer;
+	private AudioStreamPlayer _timelinePreviewRightPlayer;
 	private bool _combatActive;
 	private readonly List<Enemy> _enemies = new List<Enemy>();
 	private readonly List<Enemy> _subscribedEnemies = new List<Enemy>();
@@ -170,6 +172,7 @@ public partial class CombatController : Node
 		_feedbackLabel ??= GetNodeOrNull<Label>("../UI/RhythmLine/Panel/VBoxContainer/CurrentHitLabel");
 		_rhythmLineView ??= GetNodeOrNull<RhythmLineView>("../UI/RhythmLine");
 		_comboMeterView ??= GetNodeOrNull<ComboMeterView>("../UI/ComboMeter");
+		EnsureDawPreviewPlayers();
 		if (_rhythmLineView != null)
 		{
 			_rhythmLineView.TempoChangedRequested += OnTempoChangedRequested;
@@ -248,6 +251,10 @@ public partial class CombatController : Node
 		if (ImmediateHoverRetarget)
 		{
 			TryImmediateRetargetByHover();
+		}
+		if (UseDawTimelineMode)
+		{
+			TryPlayDawTimelinePreview();
 		}
 
 		// Playhead и lane идут по step-сетке от непрерывного времени старта паттерна.
@@ -1420,6 +1427,81 @@ public partial class CombatController : Node
 		{
 			_hoveredEnemy = null;
 		}
+	}
+
+	private void EnsureDawPreviewPlayers()
+	{
+		if (_timelinePreviewLeftPlayer != null && _timelinePreviewRightPlayer != null)
+		{
+			return;
+		}
+
+		AudioStream stream = _hitSfxPlayer?.Stream;
+		if (stream == null)
+		{
+			return;
+		}
+
+		_timelinePreviewLeftPlayer ??= CreateTimelinePreviewPlayer("DawPreviewLeft", stream, -14.0f);
+		_timelinePreviewRightPlayer ??= CreateTimelinePreviewPlayer("DawPreviewRight", stream, -14.0f);
+	}
+
+	private AudioStreamPlayer CreateTimelinePreviewPlayer(string nodeName, AudioStream stream, float volumeDb)
+	{
+		AudioStreamPlayer player = GetNodeOrNull<AudioStreamPlayer>(nodeName);
+		if (player != null)
+		{
+			player.Stream = stream;
+			player.VolumeDb = volumeDb;
+			return player;
+		}
+
+		player = new AudioStreamPlayer
+		{
+			Name = nodeName,
+			Stream = stream,
+			VolumeDb = volumeDb,
+			Bus = _hitSfxPlayer != null ? _hitSfxPlayer.Bus : "Master"
+		};
+		AddChild(player);
+		return player;
+	}
+
+	private void TryPlayDawTimelinePreview()
+	{
+		if (_rhythmManager == null || !_combatActive)
+		{
+			return;
+		}
+
+		EnsureDawPreviewPlayers();
+		if (_timelinePreviewLeftPlayer == null || _timelinePreviewRightPlayer == null)
+		{
+			return;
+		}
+
+		if (!_dawTimelineEngine.TryConsumePlaybackHit(_rhythmManager.CurrentStepIndex, out HitType hit))
+		{
+			return;
+		}
+
+		AudioStreamPlayer player = (hit == HitType.Left || hit == HitType.AccentLeft)
+			? _timelinePreviewLeftPlayer
+			: _timelinePreviewRightPlayer;
+		player.PitchScale = GetDawPreviewPitch(hit);
+		player.Play();
+	}
+
+	private static float GetDawPreviewPitch(HitType hit)
+	{
+		return hit switch
+		{
+			HitType.Left => 0.92f,
+			HitType.Right => 1.08f,
+			HitType.AccentLeft => 1.03f,
+			HitType.AccentRight => 1.18f,
+			_ => 1.0f
+		};
 	}
 
 	private void PlayHitSfx(HitResult result, bool wasAccent)

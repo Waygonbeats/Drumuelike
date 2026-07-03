@@ -160,6 +160,7 @@ public sealed class DawTimelineEngine
 	private int _clipLengthSteps;
 	private int _lastProcessedInputStepIndex = -1;
 	private int _lastSuccessfulTimelineStepIndex = -1;
+	private int _lastPreviewPlaybackStepIndex = int.MinValue;
 	private int _pendingPhraseDamage;
 	private bool _phraseDamageFlushedThisCycle;
 
@@ -185,6 +186,7 @@ public sealed class DawTimelineEngine
 		_clipLengthSteps = 0;
 		_lastProcessedInputStepIndex = -1;
 		_lastSuccessfulTimelineStepIndex = -1;
+		_lastPreviewPlaybackStepIndex = int.MinValue;
 		_pendingPhraseDamage = 0;
 		_phraseDamageFlushedThisCycle = false;
 		ResetStreak();
@@ -470,6 +472,35 @@ public sealed class DawTimelineEngine
 
 		nextHit = currentHit;
 		return true;
+	}
+
+	public bool TryConsumePlaybackHit(int currentStepIndex, out HitType hit)
+	{
+		hit = HitType.Rest;
+		if (!HasActivePattern || _patternHits.Count == 0)
+		{
+			return false;
+		}
+
+		if (currentStepIndex == _lastPreviewPlaybackStepIndex)
+		{
+			return false;
+		}
+
+		if (currentStepIndex < _cycleStartStepIndex)
+		{
+			return false;
+		}
+
+		int relativeIndex = currentStepIndex - _cycleStartStepIndex;
+		if (relativeIndex < 0 || relativeIndex >= _patternHits.Count)
+		{
+			return false;
+		}
+
+		_lastPreviewPlaybackStepIndex = currentStepIndex;
+		hit = _patternHits[relativeIndex];
+		return hit != HitType.Rest;
 	}
 
 	private void RebuildSlots()

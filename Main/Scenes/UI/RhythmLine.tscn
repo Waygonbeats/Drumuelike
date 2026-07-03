@@ -1,0 +1,87 @@
+[gd_scene load_steps=2 format=3 uid="uid://bfxh2gydhh7r4"]
+
+[ext_resource type="Script" uid="uid://b4pvvwyw4bgxa" path="res://Main/Scripts/UI/RhythmLineView.cs" id="1_view"]
+
+[node name="RhythmLine" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_view")
+
+[node name="Panel" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 192.0
+grow_horizontal = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 16.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 4
+
+[node name="TitleLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "RHYTHM LINE"
+
+[node name="TempoRow" type="HBoxContainer" parent="Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="TempoTitleLabel" type="Label" parent="Panel/VBoxContainer/TempoRow"]
+layout_mode = 2
+text = "Tempo:"
+
+[node name="TempoValueLabel" type="Label" parent="Panel/VBoxContainer/TempoRow"]
+layout_mode = 2
+text = "70 BPM"
+
+[node name="TempoSlider" type="HSlider" parent="Panel/VBoxContainer/TempoRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 60.0
+max_value = 180.0
+value = 120.0
+
+[node name="CurrentHitLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "Ожидание ввода..."
+
+[node name="ExpectedHitLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "Текущий input: -"
+
+[node name="NextHitLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "Следующий input: -"
+
+[node name="TimelineLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "| - |"
+
+[node name="PlayheadLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "  ^"
+
+[node name="MemoryTitleLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "Memory Timeline:"
+
+[node name="MemoryTimelineLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "| - |"
+
+[node name="MemoryPlayheadLabel" type="Label" parent="Panel/VBoxContainer"]
+layout_mode = 2
+text = "  ^"

@@ -1,0 +1,71 @@
+[gd_scene load_steps=12 format=3 uid="uid://kdu0ov3by4b5"]
+
+[ext_resource type="Script" uid="uid://6kud521gluwy" path="res://Main/Scripts/Core/RhythmManager.cs" id="1_rhythm"]
+[ext_resource type="AudioStream" uid="uid://wnthec6x7mkx" path="res://Main/Resources/Music/BL3R Hi-Hat 3.wav" id="1_sem31"]
+[ext_resource type="Script" uid="uid://bewok7m8x43ei" path="res://Main/Scripts/Core/InputJudge.cs" id="2_judge"]
+[ext_resource type="AudioStream" uid="uid://bkf5yja2m7u1q" path="res://Main/Resources/Music/Thumper.wav" id="2_o756f"]
+[ext_resource type="AudioStream" uid="uid://cfoftieixwd7h" path="res://Main/Resources/Music/Claps_StayOnBeat.com (138).wav" id="3_5veik"]
+[ext_resource type="Script" uid="uid://dk183y0x0c7tx" path="res://Main/Scripts/Combat/CombatController.cs" id="3_combat"]
+[ext_resource type="Script" uid="uid://ow4ch1kuegjh" path="res://Main/Scripts/Combat/PatternExecutor.cs" id="4_executor"]
+[ext_resource type="PackedScene" uid="uid://bfxh2gydhh7r4" path="res://Main/Scenes/UI/RhythmLine.tscn" id="4_line"]
+[ext_resource type="PackedScene" uid="uid://civxuc5qdj5is" path="res://Main/Scenes/UI/ComboMeter.tscn" id="5_combo"]
+[ext_resource type="Script" uid="uid://blo33n24ydgw6" path="res://Main/Scripts/Entities/Player.cs" id="7_player"]
+[ext_resource type="Script" uid="uid://dnt3lb35482y4" path="res://Main/Scripts/Room/RoomController.cs" id="8_room"]
+
+[node name="Main" type="Node2D"]
+position = Vector2(-1, 1)
+
+[node name="AudioPlayer" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("1_sem31")
+
+[node name="HitSfxPlayer" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("2_o756f")
+volume_db = -8.0
+
+[node name="MissSfxPlayer" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("3_5veik")
+volume_db = -10.0
+
+[node name="RhythmManager" type="Node" parent="."]
+script = ExtResource("1_rhythm")
+AudioPlayerPath = NodePath("../AudioPlayer")
+MetronomeUseSubdivisionSteps = true
+
+[node name="InputJudge" type="Node" parent="."]
+script = ExtResource("2_judge")
+RhythmManagerPath = NodePath("../RhythmManager")
+PerfectWindowSeconds = 0.07
+GoodWindowSeconds = 0.14
+
+[node name="CombatController" type="Node" parent="."]
+script = ExtResource("3_combat")
+RhythmManagerPath = NodePath("../RhythmManager")
+InputJudgePath = NodePath("../InputJudge")
+RhythmFeedbackLabelPath = NodePath("../UI/RhythmLine/Panel/VBoxContainer/CurrentHitLabel")
+PatternExecutorPath = NodePath("../PatternExecutor")
+RoomPath = NodePath("../Room")
+
+[node name="PatternExecutor" type="Node" parent="."]
+script = ExtResource("4_executor")
+
+[node name="Player" type="CharacterBody2D" parent="."]
+script = ExtResource("7_player")
+CombatControllerPath = NodePath("../CombatController")
+MoveSpeed = 210.0
+Acceleration = 1450.0
+Deceleration = 1800.0
+DodgeSpeed = 460.0
+DodgeDurationSeconds = 0.15
+DodgeCooldownSeconds = 0.45
+
+[node name="Room" type="Node2D" parent="."]
+script = ExtResource("8_room")
+WaveRespawnDelaySeconds = 1.2
+MaxWaves = 6
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="RhythmLine" parent="UI" instance=ExtResource("4_line")]
+scale = Vector2(0.999278, 1.00822)
+
+[node name="ComboMeter" parent="UI" instance=ExtResource("5_combo")]

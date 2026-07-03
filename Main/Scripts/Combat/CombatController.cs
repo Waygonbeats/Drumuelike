@@ -98,6 +98,9 @@ public partial class CombatController : Node
 	[Export(PropertyHint.Range, "0,0.08,0.005")]
 	public double PerfectHitStopSeconds { get; set; } = 0.025;
 
+	[Export]
+	public bool PlayDawTimelinePreviewNotes { get; set; } = false;
+
 	private RhythmManager _rhythmManager;
 	private InputJudge _inputJudge;
 	private Label _feedbackLabel;
@@ -252,7 +255,7 @@ public partial class CombatController : Node
 		{
 			TryImmediateRetargetByHover();
 		}
-		if (UseDawTimelineMode)
+		if (UseDawTimelineMode && PlayDawTimelinePreviewNotes)
 		{
 			TryPlayDawTimelinePreview();
 		}

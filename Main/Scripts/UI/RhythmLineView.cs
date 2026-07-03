@@ -23,6 +23,9 @@ public partial class RhythmLineView : Control
 	[Export(PropertyHint.Range, "20,96,1")]
 	public float LaneNoteSpacing { get; set; } = 48.0f;
 
+	[Export(PropertyHint.Range, "28,96,1")]
+	public float DawLaneHeight { get; set; } = 42.0f;
+
 	// Небольшой "разбег" перед первой нотой, чтобы она приходила справа.
 	[Export(PropertyHint.Range, "0,6,1")]
 	public int LaneLeadInSteps { get; set; } = 2;
@@ -348,8 +351,8 @@ public partial class RhythmLineView : Control
 
 		if (UseMovingLaneView)
 		{
-			_timelineLabel.Text = "TAIKO lane: ноты идут справа налево";
-			_playheadLabel.Text = $"Позиция: {_timelinePlayheadIndex + 1}/{_timelineNotes.Count}";
+			_timelineLabel.Text = $"DAW Grid: {_timelineNotes.Count} steps | {Math.Max(1, BarSlotCount)} steps/bar";
+			_playheadLabel.Text = $"Playhead: {_timelinePlayheadIndex + 1}/{_timelineNotes.Count}";
 
 			// В lane-режиме текущий слот не пропускает Rest: пауза тоже является правилом ввода.
 			int currentSlotIndex = Mathf.Clamp(_timelinePlayheadIndex, 0, _timelineNotes.Count - 1);
@@ -415,17 +418,29 @@ public partial class RhythmLineView : Control
 
 		Rect2 panelRect = new Rect2(_panel.Position, _panel.Size);
 		float hitX = panelRect.Position.X + panelRect.Size.X * Mathf.Clamp(HitLineNormalizedX, 0.05f, 0.45f);
-		float laneY = panelRect.Position.Y + panelRect.Size.Y - 22.0f;
 		float laneLeft = panelRect.Position.X + 24.0f;
 		float laneRight = panelRect.Position.X + panelRect.Size.X - 24.0f;
+		float laneBottom = panelRect.Position.Y + panelRect.Size.Y - 18.0f;
+		float laneTop = laneBottom - DawLaneHeight;
+		float laneMid = laneTop + DawLaneHeight * 0.5f;
+		float leftLaneY = laneTop + DawLaneHeight * 0.28f;
+		float rightLaneY = laneTop + DawLaneHeight * 0.72f;
 		float pixelsPerSecond = LaneNoteSpacing / _laneStepIntervalSeconds;
 		Font font = ThemeDB.FallbackFont;
 
-		// Базовая линия движения и статичная "зона попадания" (Taiko-style).
-		DrawLine(new Vector2(laneLeft, laneY), new Vector2(laneRight, laneY), new Color(0.55f, 0.55f, 0.6f), 1.0f);
-		DrawCircle(new Vector2(hitX, laneY), 13.0f, new Color(0.15f, 0.15f, 0.18f));
-		DrawArc(new Vector2(hitX, laneY), 13.0f, 0.0f, Mathf.Tau, 40, new Color(1.0f, 1.0f, 1.0f), 2.0f);
-		DrawArc(new Vector2(hitX, laneY), 9.0f, 0.0f, Mathf.Tau, 40, new Color(0.85f, 0.85f, 0.9f), 1.0f);
+		DrawRect(
+			new Rect2(new Vector2(laneLeft, laneTop), new Vector2(laneRight - laneLeft, DawLaneHeight)),
+			new Color(0.08f, 0.09f, 0.11f, 0.94f));
+		DrawRect(
+			new Rect2(new Vector2(laneLeft, laneTop), new Vector2(laneRight - laneLeft, DawLaneHeight)),
+			new Color(0.38f, 0.42f, 0.5f, 0.65f),
+			false,
+			1.0f);
+		DrawLine(new Vector2(laneLeft, laneMid), new Vector2(laneRight, laneMid), new Color(0.3f, 0.35f, 0.42f, 0.9f), 1.0f);
+		DrawLine(new Vector2(laneLeft, leftLaneY), new Vector2(laneRight, leftLaneY), new Color(0.18f, 0.62f, 0.78f, 0.35f), 1.0f);
+		DrawLine(new Vector2(laneLeft, rightLaneY), new Vector2(laneRight, rightLaneY), new Color(0.8f, 0.46f, 0.18f, 0.35f), 1.0f);
+		DrawLine(new Vector2(hitX, laneTop - 6.0f), new Vector2(hitX, laneBottom + 6.0f), new Color(0.98f, 0.98f, 1.0f, 0.95f), 2.0f);
+		DrawRect(new Rect2(new Vector2(hitX - 5.0f, laneTop), new Vector2(10.0f, DawLaneHeight)), new Color(1.0f, 1.0f, 1.0f, 0.08f));
 
 		if (_hitPulseSeconds > 0.0f && _lastResult != null)
 		{
@@ -436,14 +451,14 @@ public partial class RhythmLineView : Control
 					: new Color(1.0f, 0.35f, 0.35f, 0.8f));
 			float pulseRadius = 15.0f + (0.12f - _hitPulseSeconds) * 82.0f;
 			float pulseWidth = _lastResult == HitResult.Perfect ? 3.0f : 2.0f;
-			DrawArc(new Vector2(hitX, laneY), pulseRadius, 0.0f, Mathf.Tau, 56, pulseColor, pulseWidth);
+			DrawArc(new Vector2(hitX, laneMid), pulseRadius, 0.0f, Mathf.Tau, 56, pulseColor, pulseWidth);
 
 			if (font != null)
 			{
 				string resultText = FormatHitResultLabel(_lastResult.Value, _lastTimingOffsetSeconds);
 				Vector2 size = font.GetStringSize(resultText, HorizontalAlignment.Left, -1, 14);
 				Color textColor = pulseColor.Lightened(0.2f);
-				DrawString(font, new Vector2(hitX - size.X * 0.5f, laneY - 30.0f), resultText, HorizontalAlignment.Left, -1, 14, textColor);
+				DrawString(font, new Vector2(hitX - size.X * 0.5f, laneTop - 12.0f), resultText, HorizontalAlignment.Left, -1, 14, textColor);
 			}
 		}
 
@@ -469,7 +484,7 @@ public partial class RhythmLineView : Control
 			Color guideColor = i < _timelineNotes.Count
 				? new Color(0.35f, 0.35f, 0.4f, 0.45f)
 				: new Color(0.6f, 0.6f, 0.72f, 0.28f);
-			DrawLine(new Vector2(gx, laneY - 6.0f), new Vector2(gx, laneY + 6.0f), guideColor, 1.0f);
+			DrawLine(new Vector2(gx, laneTop), new Vector2(gx, laneBottom), guideColor, 1.0f);
 
 			if (i % barSlots == 0)
 			{
@@ -477,7 +492,12 @@ public partial class RhythmLineView : Control
 				Color barColor = previewBoundary
 					? new Color(0.75f, 0.78f, 1.0f, 0.45f)
 					: new Color(1.0f, 1.0f, 1.0f, 0.68f);
-				DrawLine(new Vector2(gx, laneY - 20.0f), new Vector2(gx, laneY + 20.0f), barColor, 2.0f);
+				DrawLine(new Vector2(gx, laneTop - 6.0f), new Vector2(gx, laneBottom + 6.0f), barColor, 2.0f);
+				if (font != null)
+				{
+					string barLabel = $"B{(i / barSlots) + 1}";
+					DrawString(font, new Vector2(gx + 4.0f, laneTop - 10.0f), barLabel, HorizontalAlignment.Left, -1, 11, new Color(0.82f, 0.86f, 0.96f, 0.9f));
+				}
 			}
 		}
 
@@ -487,14 +507,14 @@ public partial class RhythmLineView : Control
 			if (previewStartX >= laneLeft && previewStartX <= laneRight)
 			{
 				DrawLine(
-					new Vector2(previewStartX, laneY - 24.0f),
-					new Vector2(previewStartX, laneY + 24.0f),
+					new Vector2(previewStartX, laneTop - 8.0f),
+					new Vector2(previewStartX, laneBottom + 8.0f),
 					new Color(0.45f, 0.9f, 1.0f, 0.65f),
 					2.0f);
 			}
 		}
 
-		// Рисуем текущий паттерн.
+		// Рисуем ноты как DAW-блоки на отдельных L/R рядах.
 		for (int i = 0; i < _timelineNotes.Count; i++)
 		{
 			float x = startX + GetStepTimeSeconds(i) * pixelsPerSecond;
@@ -506,35 +526,39 @@ public partial class RhythmLineView : Control
 			HitType note = _timelineNotes[i];
 			if (note == HitType.Rest)
 			{
-				DrawCircle(new Vector2(x, laneY), 3.5f, new Color(0.7f, 0.7f, 0.76f, 0.65f));
-				DrawLine(new Vector2(x - 5.0f, laneY), new Vector2(x + 5.0f, laneY), new Color(0.7f, 0.7f, 0.76f, 0.45f), 1.0f);
+				DrawCircle(new Vector2(x, laneMid), 3.0f, new Color(0.7f, 0.7f, 0.76f, 0.65f));
+				DrawLine(new Vector2(x - 5.0f, laneMid), new Vector2(x + 5.0f, laneMid), new Color(0.7f, 0.7f, 0.76f, 0.45f), 1.0f);
 				continue;
 			}
 
 			Color color = GetLaneColor(note);
 			bool accent = IsAccent(note);
-			float radius = accent ? 11.0f : 9.0f;
+			float noteY = IsLeftHand(note) ? leftLaneY : rightLaneY;
+			float noteHeight = accent ? 16.0f : 12.0f;
+			float noteWidth = accent ? 18.0f : 14.0f;
 			float distanceToHitPx = Mathf.Abs(x - hitX);
 			if (distanceToHitPx < LaneNoteSpacing * 0.18f)
 			{
-				// Лёгкая подсветка ноты, которая проходит через hit-line.
 				color = color.Lightened(0.2f);
-				radius += 1.5f;
+				noteWidth += 2.0f;
 			}
 
-			DrawCircle(new Vector2(x, laneY), radius, color);
+			Vector2 notePos = new Vector2(x - noteWidth * 0.5f, noteY - noteHeight * 0.5f);
+			Vector2 noteSize = new Vector2(noteWidth, noteHeight);
+			DrawRect(new Rect2(notePos, noteSize), color);
+			DrawRect(new Rect2(notePos, noteSize), color.Lightened(0.2f), false, 1.0f);
 			if (font != null)
 			{
 				string symbol = FormatHitType(note);
-				Vector2 size = font.GetStringSize(symbol, HorizontalAlignment.Left, -1, 14);
-				DrawString(font, new Vector2(x - size.X * 0.5f, laneY + 5.0f), symbol, HorizontalAlignment.Left, -1, 14, Colors.Black);
+				Vector2 size = font.GetStringSize(symbol, HorizontalAlignment.Left, -1, 12);
+				DrawString(font, new Vector2(x - size.X * 0.5f, noteY + 4.0f), symbol, HorizontalAlignment.Left, -1, 12, Colors.Black);
 			}
 		}
 
-		DrawUpcomingPhrasePreview(startX, pixelsPerSecond, laneY, laneLeft, laneRight, font);
+		DrawUpcomingPhrasePreview(startX, pixelsPerSecond, leftLaneY, rightLaneY, laneMid, laneLeft, laneRight, font);
 	}
 
-	private void DrawUpcomingPhrasePreview(float startX, float pixelsPerSecond, float laneY, float laneLeft, float laneRight, Font font)
+	private void DrawUpcomingPhrasePreview(float startX, float pixelsPerSecond, float leftLaneY, float rightLaneY, float laneMid, float laneLeft, float laneRight, Font font)
 	{
 		if (_upcomingPhrase.Count == 0 || _timelineNotes.Count == 0)
 		{
@@ -553,18 +577,21 @@ public partial class RhythmLineView : Control
 			HitType note = _upcomingPhrase[i];
 			if (note == HitType.Rest)
 			{
-				DrawCircle(new Vector2(x, laneY), 3.0f, new Color(0.8f, 0.8f, 0.88f, 0.35f));
+				DrawCircle(new Vector2(x, laneMid), 3.0f, new Color(0.8f, 0.8f, 0.88f, 0.35f));
 				continue;
 			}
 
 			Color color = GetLaneColor(note);
 			color.A = 0.42f;
-			DrawCircle(new Vector2(x, laneY), IsAccent(note) ? 9.5f : 8.0f, color);
+			float noteY = IsLeftHand(note) ? leftLaneY : rightLaneY;
+			float noteHeight = IsAccent(note) ? 16.0f : 12.0f;
+			float noteWidth = IsAccent(note) ? 18.0f : 14.0f;
+			DrawRect(new Rect2(new Vector2(x - noteWidth * 0.5f, noteY - noteHeight * 0.5f), new Vector2(noteWidth, noteHeight)), color);
 			if (font != null)
 			{
 				string symbol = FormatHitType(note);
-				Vector2 size = font.GetStringSize(symbol, HorizontalAlignment.Left, -1, 14);
-				DrawString(font, new Vector2(x - size.X * 0.5f, laneY + 5.0f), symbol, HorizontalAlignment.Left, -1, 14, new Color(0.05f, 0.05f, 0.06f, 0.65f));
+				Vector2 size = font.GetStringSize(symbol, HorizontalAlignment.Left, -1, 12);
+				DrawString(font, new Vector2(x - size.X * 0.5f, noteY + 4.0f), symbol, HorizontalAlignment.Left, -1, 12, new Color(0.05f, 0.05f, 0.06f, 0.65f));
 			}
 		}
 	}
@@ -696,6 +723,11 @@ public partial class RhythmLineView : Control
 	private static bool IsAccent(HitType hitType)
 	{
 		return hitType == HitType.AccentLeft || hitType == HitType.AccentRight;
+	}
+
+	private static bool IsLeftHand(HitType hitType)
+	{
+		return hitType == HitType.Left || hitType == HitType.AccentLeft;
 	}
 
 	private static string FormatHitResultLabel(HitResult result, double? timingOffsetSeconds)

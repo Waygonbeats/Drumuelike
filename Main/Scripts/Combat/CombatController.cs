@@ -28,6 +28,9 @@ public partial class CombatController : Node
 	[Export]
 	public NodePath PatternExecutorPath { get; set; } = new NodePath();
 
+	[Export]
+	public RhythmSystemMode RhythmSystem { get; set; } = RhythmSystemMode.LegacyPattern;
+
 	// Ссылка на Room, внутри которого ищем врагов.
 	[Export]
 	public NodePath RoomPath { get; set; } = new NodePath();
@@ -101,6 +104,7 @@ public partial class CombatController : Node
 	private RhythmLineView _rhythmLineView;
 	private ComboMeterView _comboMeterView;
 	private PatternExecutor _patternExecutor;
+	private readonly DawTimelineEngine _dawTimelineEngine = new DawTimelineEngine();
 	private Node _roomNode;
 	private Player _player;
 	private AudioStreamPlayer _hitSfxPlayer;
@@ -124,6 +128,7 @@ public partial class CombatController : Node
 	private int _lastQueuedSwitchBarIndex = -1;
 	private int _activePatternStartStepIndex = -1;
 	private double _activePatternStartSongTimeSeconds = -1.0;
+	private bool UseDawTimelineMode => RhythmSystem == RhythmSystemMode.DawTimelineExperiment;
 
 	private readonly struct PendingPatternSwitch
 	{
@@ -185,6 +190,7 @@ public partial class CombatController : Node
 		_activePatternStartStepIndex = -1;
 		_activePatternStartSongTimeSeconds = -1.0;
 		_patternExecutor?.SetActivePattern(null);
+		_dawTimelineEngine.Clear();
 		ClearPendingPatternSwitch();
 		_queuedDefeatedEnemies.Clear();
 		RefreshUiState();
@@ -213,8 +219,12 @@ public partial class CombatController : Node
 			_rhythmLineView.SetTempo(_rhythmManager.Bpm);
 			_rhythmLineView.BarSlotCount = GetBarSlotCount();
 		}
+		if (_rhythmManager != null)
+		{
+			_dawTimelineEngine.Initialize(_rhythmManager, BuildDawTimelineSettings());
+		}
 		SyncRhythmBalanceSettings();
-		if (_rhythmManager == null || _inputJudge == null || _patternExecutor == null || _roomNode == null)
+		if (_rhythmManager == null || _inputJudge == null || (!UseDawTimelineMode && _patternExecutor == null) || _roomNode == null)
 		{
 			GD.PushError("CombatController: не найдены обязательные ссылки на узлы.");
 			UpdateFeedback("ОШИБКА ССЫЛОК БОЯ");
@@ -227,9 +237,12 @@ public partial class CombatController : Node
 	public override void _Process(double delta)
 	{
 		UpdatePatternTimeline();
-		TryCleanupActiveTimeline();
 		TryApplyPendingPatternSwitch();
-		TryAppendQueuedMemoryPhrase();
+		if (!UseDawTimelineMode)
+		{
+			TryCleanupActiveTimeline();
+			TryAppendQueuedMemoryPhrase();
+		}
 		CleanupInvalidEnemyReferences();
 		UpdateHoveredEnemyByMouse();
 		if (ImmediateHoverRetarget)
@@ -307,7 +320,7 @@ public partial class CombatController : Node
 
 	public void StartCombat()
 	{
-		if (_rhythmManager == null || _inputJudge == null || _patternExecutor == null)
+		if (_rhythmManager == null || _inputJudge == null || (!UseDawTimelineMode && _patternExecutor == null))
 		{
 			UpdateFeedback("ОШИБКА ССЫЛОК БОЯ");
 			return;
@@ -324,7 +337,7 @@ public partial class CombatController : Node
 		// После старта ритма таймер обнуляется, поэтому фиксируем старт playhead по step заново.
 		_activePatternStartStepIndex = _rhythmManager.CurrentStepIndex;
 		_activePatternStartSongTimeSeconds = _rhythmManager.SongTimeSeconds;
-		UpdateFeedback($"БОЙ ЗАПУЩЕН | ЦЕЛЬ: {FormatEnemyLabel(_patternExecutor.ActiveEnemy)}");
+		UpdateFeedback($"БОЙ ЗАПУЩЕН | ЦЕЛЬ: {FormatEnemyLabel(GetCurrentActiveEnemy())}");
 		RefreshUiState();
 	}
 
@@ -342,6 +355,12 @@ public partial class CombatController : Node
 
 	private void HandlePlayerHit(HitType hitType)
 	{
+		if (UseDawTimelineMode)
+		{
+			HandlePlayerHitDaw(hitType);
+			return;
+		}
+
 		if (_inputJudge == null || _patternExecutor == null)
 		{
 			return;
@@ -459,6 +478,103 @@ public partial class CombatController : Node
 		RefreshUiState();
 	}
 
+	private void HandlePlayerHitDaw(HitType hitType)
+	{
+		if (_rhythmManager == null)
+		{
+			return;
+		}
+
+		if (!EnsureActiveEnemy())
+		{
+			UpdateFeedback("ВСЕ ВРАГИ ПОБЕЖДЕНЫ");
+			RefreshUiState();
+			return;
+		}
+
+		DawTimelineInputResult step = _dawTimelineEngine.ProcessInput(hitType);
+		if (!step.Consumed || step.FailReason == DawTimelineFailReason.DuplicateInputIgnored)
+		{
+			return;
+		}
+
+		if (!step.Success)
+		{
+			PlayMissSfx();
+			SetLastUiResult(HitResult.Miss, step.OffsetSeconds);
+			if (step.FailReason == DawTimelineFailReason.SequenceMiss)
+			{
+				UpdateFeedback($"НЕ ТА РУКА: ожидался {step.ExpectedHit}, введен {hitType}");
+			}
+			else if (step.FailReason == DawTimelineFailReason.NoActivePattern)
+			{
+				UpdateFeedback("НЕТ АКТИВНОЙ ФРАЗЫ");
+			}
+			else
+			{
+				UpdateFeedback(step.OffsetSeconds != null
+					? $"{FormatTimingInputError(step.OffsetSeconds.Value)} | цель: {FormatEnemyLabel(GetCurrentActiveEnemy())}"
+					: $"MISS | ЦЕЛЬ: {FormatEnemyLabel(GetCurrentActiveEnemy())}");
+			}
+
+			RefreshUiState();
+			return;
+		}
+
+		HandleResolvedDamage(step.DamageTarget);
+
+		string damageText = step.DamageApplied > 0 ? step.DamageApplied.ToString() : "копится";
+		string message = $"Ввод: {hitType}, Оценка: {step.HitResult}, Урон: {damageText}, x{step.MultiplierAfterHit}";
+		if (!step.StreakContinued && step.StreakAfterHit == 1)
+		{
+			message += " | ЦЕПОЧКА СБРОШЕНА";
+		}
+		if (step.PatternCompleted)
+		{
+			message += " | ФРАЗА ЗАВЕРШЕНА";
+		}
+		if (HasPendingPatternSwitch())
+		{
+			PendingPatternSwitch nextSwitch = _pendingPatternSwitches.Peek();
+			if (nextSwitch.Enemy != null && IsInstanceValid(nextSwitch.Enemy))
+			{
+				message += $" | СЛЕД. БАР: {FormatEnemyLabel(nextSwitch.Enemy)}";
+			}
+		}
+
+		PlayHitSfx(step.HitResult, step.WasAccent);
+		TryApplyPerfectHitStop(step.HitResult);
+		SetLastUiResult(step.HitResult, step.OffsetSeconds);
+		UpdateFeedback(message);
+		RefreshUiState();
+	}
+
+	private void HandleResolvedDamage(Enemy defeatedByPhrase)
+	{
+		if (defeatedByPhrase == null || defeatedByPhrase.IsAlive)
+		{
+			return;
+		}
+
+		bool queuedMemoryPhrase = EnqueueDefeatedEnemyPattern(defeatedByPhrase);
+		if (!UseDawTimelineMode)
+		{
+			_patternExecutor.RemoveTargetFromTimeline(defeatedByPhrase);
+		}
+
+		if (queuedMemoryPhrase)
+		{
+			UpdateFeedback($"ВРАГ ПОБЕЖДЕН: {FormatEnemyLabel(defeatedByPhrase)} | ФРАЗА В ОЧЕРЕДИ");
+		}
+
+		if (!EnsureActiveEnemy())
+		{
+			StopCombat();
+			UpdateFeedback("КОМНАТА ОЧИЩЕНА");
+			RefreshUiState();
+		}
+	}
+
 	private void CollectEnemiesFromRoom()
 	{
 		_enemies.Clear();
@@ -494,6 +610,40 @@ public partial class CombatController : Node
 
 	private bool EnsureActiveEnemy()
 	{
+		if (UseDawTimelineMode)
+		{
+			if (_dawTimelineEngine.ActiveEnemy != null && _dawTimelineEngine.ActiveEnemy.IsAlive)
+			{
+				return true;
+			}
+
+			if (HasPendingPatternSwitch())
+			{
+				TryApplyPendingPatternSwitch(forceWhenTimelineEmpty: true);
+				if (_dawTimelineEngine.HasActivePattern || HasPendingPatternSwitch())
+				{
+					return true;
+				}
+			}
+
+			for (int i = 0; i < _enemies.Count; i++)
+			{
+				_enemies[i].EnsureInitializedForCombat();
+				if (_enemies[i].IsAlive)
+				{
+					SelectEnemyByIndex(i);
+					return true;
+				}
+			}
+
+			foreach (Enemy enemy in _enemies)
+			{
+				enemy.SetActiveTarget(false);
+			}
+
+			return false;
+		}
+
 		if (_patternExecutor == null)
 		{
 			return false;
@@ -539,16 +689,17 @@ public partial class CombatController : Node
 
 	private void SelectNextEnemy()
 	{
-		if (_enemies.Count == 0 || _patternExecutor == null)
+		if (_enemies.Count == 0 || (!UseDawTimelineMode && _patternExecutor == null))
 		{
 			return;
 		}
 
 		// На каждой попытке пересчитываем базовый индекс от текущей реальной цели.
 		int currentIndex = -1;
-		if (_patternExecutor.ActiveEnemy != null)
+		Enemy activeEnemy = GetCurrentActiveEnemy();
+		if (activeEnemy != null)
 		{
-			currentIndex = _enemies.IndexOf(_patternExecutor.ActiveEnemy);
+			currentIndex = _enemies.IndexOf(activeEnemy);
 		}
 
 		if (currentIndex < 0)
@@ -564,7 +715,7 @@ public partial class CombatController : Node
 				SelectEnemyByIndex(candidateIndex);
 				if (!HasPendingPatternSwitch())
 				{
-					UpdateFeedback($"НОВАЯ ЦЕЛЬ: {FormatEnemyLabel(_patternExecutor.ActiveEnemy)}");
+					UpdateFeedback($"НОВАЯ ЦЕЛЬ: {FormatEnemyLabel(GetCurrentActiveEnemy())}");
 				}
 				RefreshUiState();
 				return;
@@ -574,7 +725,7 @@ public partial class CombatController : Node
 
 	private void SelectEnemyByIndex(int enemyIndex)
 	{
-		if (_patternExecutor == null || enemyIndex < 0 || enemyIndex >= _enemies.Count)
+		if ((!UseDawTimelineMode && _patternExecutor == null) || enemyIndex < 0 || enemyIndex >= _enemies.Count)
 		{
 			return;
 		}
@@ -585,12 +736,12 @@ public partial class CombatController : Node
 
 	private void SelectEnemy(Enemy enemy, int enemyIndex = -1)
 	{
-		if (_patternExecutor == null || enemy == null || !enemy.IsAlive)
+		if ((!UseDawTimelineMode && _patternExecutor == null) || enemy == null || !enemy.IsAlive)
 		{
 			return;
 		}
 
-		if (_combatActive && _patternExecutor.HasActivePattern)
+		if (_combatActive && HasActiveRhythmPattern())
 		{
 			QueuePatternSwitch(enemy, enemyIndex);
 			return;
@@ -639,7 +790,7 @@ public partial class CombatController : Node
 		int leadInSteps = GetLaneLeadInSteps();
 		int targetStep = pending.TargetBarIndex * GetBarSlotCount();
 		int stepsUntilTargetBar = Math.Max(0, targetStep - currentStep);
-		bool timelineEmpty = !_patternExecutor.HasActivePattern;
+		bool timelineEmpty = !HasActiveRhythmPattern();
 		if (!timelineEmpty && stepsUntilTargetBar > leadInSteps)
 		{
 			return;
@@ -655,7 +806,7 @@ public partial class CombatController : Node
 		ApplyPatternSwitch(pending.Enemy, pending.EnemyIndex, stepsUntilTargetBar, appendToTimeline: appendToTimeline, insertBreathBefore: insertBreathBefore);
 		_pendingPatternSwitches.Dequeue();
 		UpdatePendingPatternPreview();
-		UpdateFeedback($"ГОТОВИТСЯ БАР | ЦЕЛЬ: {FormatEnemyLabel(_patternExecutor.ActiveEnemy)}");
+		UpdateFeedback($"ГОТОВИТСЯ БАР | ЦЕЛЬ: {FormatEnemyLabel(GetCurrentActiveEnemy())}");
 		RefreshUiState();
 	}
 
@@ -669,7 +820,13 @@ public partial class CombatController : Node
 		RhythmPattern pattern = new RhythmPattern(enemy.GetPatternHits(), enemy);
 		int currentStep = _rhythmManager != null ? _rhythmManager.CurrentStepIndex : 0;
 		int leadInSteps = leadInOverrideSteps ?? GetLaneLeadInSteps();
-		if (appendToTimeline && _patternExecutor.HasActivePattern)
+		if (UseDawTimelineMode)
+		{
+			_dawTimelineEngine.SetActivePattern(enemy, pattern.Hits, currentStep, leadInSteps);
+			_activePatternStartStepIndex = currentStep;
+			_activePatternStartSongTimeSeconds = _rhythmManager != null ? _rhythmManager.SongTimeSeconds : 0.0;
+		}
+		else if (appendToTimeline && _patternExecutor.HasActivePattern)
 		{
 			if (insertBreathBefore)
 			{
@@ -754,6 +911,12 @@ public partial class CombatController : Node
 
 	private bool ShouldInsertBreathBeforePendingSwitch()
 	{
+		if (UseDawTimelineMode)
+		{
+			return _dawTimelineEngine.ActiveTimelineSlotCount >= GetDenseTimelineSlotThreshold()
+				&& !HasPendingPatternSwitch();
+		}
+
 		return _patternExecutor != null
 			&& _patternExecutor.ActiveTimelineSlotCount >= GetDenseTimelineSlotThreshold()
 			&& !HasPendingPatternSwitch();
@@ -787,12 +950,51 @@ public partial class CombatController : Node
 
 	private void SyncRhythmBalanceSettings()
 	{
-		if (_patternExecutor == null)
+		if (!UseDawTimelineMode)
+		{
+			if (_patternExecutor == null)
+			{
+				return;
+			}
+
+			_patternExecutor.MaxActiveTimelineSlots = GetMaxActiveTimelineSlots();
+		}
+
+		if (_rhythmManager == null)
 		{
 			return;
 		}
 
-		_patternExecutor.MaxActiveTimelineSlots = GetMaxActiveTimelineSlots();
+		_dawTimelineEngine.Initialize(_rhythmManager, BuildDawTimelineSettings());
+	}
+
+	private DawTimelineSettings BuildDawTimelineSettings()
+	{
+		return new DawTimelineSettings
+		{
+			PerfectWindowSeconds = _inputJudge != null ? _inputJudge.PerfectWindowSeconds : 0.06,
+			GoodWindowSeconds = _inputJudge != null ? _inputJudge.GoodWindowSeconds : 0.12,
+			InputLatencyOffsetMs = _inputJudge != null ? _inputJudge.InputLatencyOffsetMs : 0.0,
+			PerfectBaseDamage = _patternExecutor != null ? _patternExecutor.PerfectBaseDamage : 2,
+			GoodBaseDamage = _patternExecutor != null ? _patternExecutor.GoodBaseDamage : 1,
+			StreakStepN = _patternExecutor != null ? _patternExecutor.StreakStepN : 4,
+			PerfectStreakGain = _patternExecutor != null ? _patternExecutor.PerfectStreakGain : 2,
+			GoodStreakGain = _patternExecutor != null ? _patternExecutor.GoodStreakGain : 1,
+			AccentDamageBonus = _patternExecutor != null ? _patternExecutor.AccentDamageBonus : 1,
+			AccentStreakBonus = _patternExecutor != null ? _patternExecutor.AccentStreakBonus : 1,
+			AccentPerfectWindowSeconds = _patternExecutor != null ? _patternExecutor.AccentPerfectWindowSeconds : 0.045,
+			UseAccentLogic = _patternExecutor != null && _patternExecutor.UseAccentLogic
+		};
+	}
+
+	private Enemy GetCurrentActiveEnemy()
+	{
+		return UseDawTimelineMode ? _dawTimelineEngine.ActiveEnemy : _patternExecutor?.ActiveEnemy;
+	}
+
+	private bool HasActiveRhythmPattern()
+	{
+		return UseDawTimelineMode ? _dawTimelineEngine.HasActivePattern : (_patternExecutor != null && _patternExecutor.HasActivePattern);
 	}
 
 	private static string FormatEnemyLabel(Enemy enemy)
@@ -835,12 +1037,19 @@ public partial class CombatController : Node
 
 	private void RefreshUiState()
 	{
-		if (_patternExecutor == null)
+		if (UseDawTimelineMode)
 		{
-			return;
+			_comboMeterView?.SetValues(_dawTimelineEngine.Streak, _dawTimelineEngine.Multiplier);
 		}
+		else
+		{
+			if (_patternExecutor == null)
+			{
+				return;
+			}
 
-		_comboMeterView?.SetValues(_patternExecutor.Streak, _patternExecutor.Multiplier);
+			_comboMeterView?.SetValues(_patternExecutor.Streak, _patternExecutor.Multiplier);
+		}
 		if (_player != null)
 		{
 			_comboMeterView?.SetPlayerHp(_player.CurrentHp, _player.MaxHp);
@@ -851,7 +1060,10 @@ public partial class CombatController : Node
 			return;
 		}
 
-		if (_patternExecutor.TryGetCurrentAndNextHits(out HitType currentHit, out HitType nextHit, out bool hasNextHit))
+		bool hasPreview = UseDawTimelineMode
+			? _dawTimelineEngine.TryGetCurrentAndNextHits(out HitType currentHit, out HitType nextHit, out bool hasNextHit)
+			: _patternExecutor.TryGetCurrentAndNextHits(out currentHit, out nextHit, out hasNextHit);
+		if (hasPreview)
 		{
 			_rhythmLineView.SetPatternPreview(currentHit, hasNextHit, nextHit);
 		}
@@ -860,7 +1072,10 @@ public partial class CombatController : Node
 			_rhythmLineView.ClearPatternPreview();
 		}
 
-		if (_patternExecutor.TryGetTimeline(out List<HitType> notes, out int currentIndex))
+		bool hasTimeline = UseDawTimelineMode
+			? _dawTimelineEngine.TryGetTimeline(out List<HitType> notes, out int currentIndex)
+			: _patternExecutor.TryGetTimeline(out notes, out currentIndex);
+		if (hasTimeline)
 		{
 			_rhythmLineView.SetTimeline(notes, currentIndex, _lastUiHitResult, _lastUiTimingOffsetSeconds);
 		}
@@ -877,7 +1092,35 @@ public partial class CombatController : Node
 
 	private void UpdatePatternTimeline()
 	{
-		if (!_combatActive || _patternExecutor == null || _rhythmManager == null)
+		if (!_combatActive || _rhythmManager == null)
+		{
+			return;
+		}
+
+		if (UseDawTimelineMode)
+		{
+			DawTimelineAdvanceResult dawTimeline = _dawTimelineEngine.AdvanceTimeline();
+			if (!dawTimeline.MissedRequiredHit && !dawTimeline.PatternCompleted)
+			{
+				return;
+			}
+
+			if (dawTimeline.MissedRequiredHit)
+			{
+				PlayMissSfx();
+				SetLastUiResult(HitResult.Miss, null);
+				UpdateFeedback($"MISS | ПРОПУЩЕНА НОТА: {dawTimeline.MissedHit}");
+			}
+			else if (dawTimeline.PatternCompleted)
+			{
+				UpdateFeedback("ФРАЗА ЗАВЕРШЕНА");
+			}
+
+			RefreshUiState();
+			return;
+		}
+
+		if (_patternExecutor == null)
 		{
 			return;
 		}
@@ -899,7 +1142,7 @@ public partial class CombatController : Node
 
 		if (timeline.PatternCompleted)
 		{
-			UpdateFeedback("ПАУЗА СЫГРАНА | ПАТТЕРН ЗАВЕРШЁН");
+			UpdateFeedback("ПАУЗА СЫГРАНА | ПАТТЕРН ЗАВЕРШЕН");
 		}
 
 		RefreshUiState();
@@ -1079,12 +1322,12 @@ public partial class CombatController : Node
 
 	private void TrySnapTargetToHoveredEnemy()
 	{
-		if (_hoveredEnemy == null || !_hoveredEnemy.IsAlive || _patternExecutor == null)
+		if (_hoveredEnemy == null || !_hoveredEnemy.IsAlive || (!UseDawTimelineMode && _patternExecutor == null))
 		{
 			return;
 		}
 
-		if (_patternExecutor.ActiveEnemy == _hoveredEnemy)
+		if (GetCurrentActiveEnemy() == _hoveredEnemy)
 		{
 			return;
 		}
@@ -1096,7 +1339,7 @@ public partial class CombatController : Node
 
 	private void TryAutoRetargetByHover(float delta)
 	{
-		if (!_combatActive || _patternExecutor == null)
+		if (!_combatActive || (!UseDawTimelineMode && _patternExecutor == null))
 		{
 			_lastHoverCandidate = null;
 			_hoverCandidateTime = 0.0f;
@@ -1110,7 +1353,7 @@ public partial class CombatController : Node
 			return;
 		}
 
-		if (_patternExecutor.ActiveEnemy == _hoveredEnemy)
+		if (GetCurrentActiveEnemy() == _hoveredEnemy)
 		{
 			_lastHoverCandidate = _hoveredEnemy;
 			_hoverCandidateTime = 0.0f;
@@ -1139,12 +1382,12 @@ public partial class CombatController : Node
 
 	private void TryImmediateRetargetByHover()
 	{
-		if (!_combatActive || _patternExecutor == null || _hoveredEnemy == null || !_hoveredEnemy.IsAlive)
+		if (!_combatActive || (!UseDawTimelineMode && _patternExecutor == null) || _hoveredEnemy == null || !_hoveredEnemy.IsAlive)
 		{
 			return;
 		}
 
-		if (_patternExecutor.ActiveEnemy == _hoveredEnemy)
+		if (GetCurrentActiveEnemy() == _hoveredEnemy)
 		{
 			return;
 		}

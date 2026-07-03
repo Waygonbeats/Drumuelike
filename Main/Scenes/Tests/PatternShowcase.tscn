@@ -53,6 +53,7 @@ RhythmFeedbackLabelPath = NodePath("../UI/RhythmLine/Panel/VBoxContainer/Current
 RhythmLineViewPath = NodePath("../UI/RhythmLine")
 ComboMeterViewPath = NodePath("../UI/ComboMeter")
 PatternExecutorPath = NodePath("../PatternExecutor")
+RhythmSystem = 1
 RoomPath = NodePath("../Room")
 PlayerPath = NodePath("../Player")
 HitSfxPlayerPath = NodePath("../HitSfxPlayer")

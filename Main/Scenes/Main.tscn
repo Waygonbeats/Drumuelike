@@ -43,6 +43,7 @@ RhythmManagerPath = NodePath("../RhythmManager")
 InputJudgePath = NodePath("../InputJudge")
 RhythmFeedbackLabelPath = NodePath("../UI/RhythmLine/Panel/VBoxContainer/CurrentHitLabel")
 PatternExecutorPath = NodePath("../PatternExecutor")
+RhythmSystem = 1
 RoomPath = NodePath("../Room")
 
 [node name="PatternExecutor" type="Node" parent="."]
